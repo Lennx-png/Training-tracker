@@ -44,7 +44,7 @@ async def check_pin(request: Request, call_next):
             pass
     if request.url.path.startswith("/api/"):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-    return RedirectResponse(url="/pin")
+    return RedirectResponse(url=f"/pin?next={request.url.path}")
 
 
 # ===== PIN =====
@@ -54,9 +54,9 @@ def pin_page(request: Request):
 
 
 @app.post("/pin")
-def pin_submit(request: Request, pin: str = Form(...)):
+def pin_submit(request: Request, pin: str = Form(...), next: str = Form("/")):
     if pin == APP_PIN:
-        response = RedirectResponse(url="/", status_code=302)
+        response = RedirectResponse(url=next, status_code=302)
         response.set_cookie(
             key="session_pin",
             value=serializer.dumps("authorized"),
