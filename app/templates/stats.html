@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-4">
+    <h1 class="text-2xl font-bold">Statistiken</h1>
+
+    <div class="grid grid-cols-2 gap-3">
+        <div class="bg-stone-900 rounded-xl p-4 border border-stone-800 text-center">
+            <p class="text-3xl font-bold text-emerald-400">{{ total_workouts }}</p>
+            <p class="text-xs text-stone-500 mt-1">Workouts</p>
+        </div>
+        <div class="bg-stone-900 rounded-xl p-4 border border-stone-800 text-center">
+            <p class="text-3xl font-bold text-emerald-400">{{ total_sets }}</p>
+            <p class="text-xs text-stone-500 mt-1">Sätze</p>
+        </div>
+    </div>
+
+    {% if latest_weight_entry %}
+    <div class="bg-stone-900 rounded-2xl p-4 border border-stone-800">
+        <h2 class="text-sm font-medium text-stone-400 mb-2">Aktuelles Gewicht</h2>
+        <p class="text-3xl font-bold">{{ latest_weight_entry.weight }} <span class="text-lg text-stone-500">kg</span></p>
+        <p class="text-xs text-stone-500 mt-1">{{ latest_weight_entry.date.strftime('%d.%m.%Y') }}</p>
+    </div>
+    {% endif %}
+
+    {% if weekly_data %}
+    <div class="bg-stone-900 rounded-2xl p-4 border border-stone-800">
+        <h2 class="text-sm font-medium text-stone-400 mb-3">Wöchentliches Volumen (kg)</h2>
+        <canvas id="volumeChart" height="150"></canvas>
+    </div>
+    <script>
+        const vCtx = document.getElementById('volumeChart');
+        new Chart(vCtx, {
+            type: 'bar',
+            data: {
+                labels: [{% for d in weekly_data %}'{{ d.week }}'{% if not loop.last %},{% endif %}{% endfor %}],
+                datasets: [{
+                    data: [{% for d in weekly_data %}{{ d.volume }}{% if not loop.last %},{% endif %}{% endfor %}],
+                    backgroundColor: 'rgba(52, 211, 153, 0.6)',
+                    borderColor: '#34d399',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#78716c', font: { size: 9 } } },
+                    y: { grid: { color: '#292524' }, ticks: { color: '#78716c', font: { size: 9 } } }
+                }
+            }
+        });
+    </script>
+    {% endif %}
+
+    {% if best_lifts %}
+    <div class="bg-stone-900 rounded-2xl p-4 border border-stone-800">
+        <h2 class="text-sm font-medium text-stone-400 mb-3">Beste Leistungen</h2>
+        <div class="space-y-1.5">
+            {% for name, data in best_lifts %}
+            <a href="/exercise/{{ all_exercises|selectattr('name', 'equalto', name)|map(attribute='id')|first if all_exercises else 0 }}"
+               class="flex items-center justify-between bg-stone-800/30 rounded-lg px-3 py-2 hover:bg-stone-800/50 transition-colors">
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium truncate">{{ name }}</p>
+                    <p class="text-xs text-stone-500">{{ data.date }}</p>
+                </div>
+                <div class="text-right flex-shrink-0 ml-2">
+                    <span class="font-bold text-emerald-400">{{ data.weight }} kg</span>
+                    {% if data.reps %}
+                    <span class="text-xs text-stone-500"> × {{ data.reps }}</span>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

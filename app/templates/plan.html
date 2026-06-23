@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Trainingsplan</h1>
+    </div>
+
+    {% set day_names = {0:"Montag",1:"Dienstag",2:"Mittwoch",3:"Donnerstag",4:"Freitag",5:"Samstag",6:"Sonntag"} %}
+
+    {% for t in templates %}
+    <div class="bg-stone-900 rounded-2xl overflow-hidden border border-stone-800">
+        <div class="bg-stone-800/50 px-4 py-3 flex items-center justify-between">
+            <h2 class="font-semibold">{{ t.name }}</h2>
+            <span class="text-xs text-stone-500">{{ t.exercises|length }} Übungen</span>
+        </div>
+
+        {% if t.exercises %}
+        <div class="divide-y divide-stone-800">
+            {% for te in t.exercises %}
+            <div class="px-4 py-3 flex items-center justify-between">
+                <div class="flex-1">
+                    <p class="text-sm font-medium">{{ te.exercise.name }}</p>
+                    <p class="text-xs text-stone-500">
+                        {{ te.target_sets }}×{{ te.target_reps_min }}-{{ te.target_reps_max }}
+                        {% if te.exercise.muscle_group %} · {{ te.exercise.muscle_group.name }}{% endif %}
+                    </p>
+                </div>
+                <form method="POST" action="/plan/exercise/{{ te.id }}/delete" onsubmit="return confirm('Entfernen?')">
+                    <button type="submit" class="text-red-400 hover:text-red-300 text-xs px-2 py-1">✕</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <details class="border-t border-stone-800">
+            <summary class="px-4 py-2.5 text-xs text-stone-400 cursor-pointer hover:text-stone-300 font-medium">
+                Übung hinzufügen
+            </summary>
+            <form method="POST" action="/plan/exercise/add" class="px-4 pb-4 pt-2 space-y-2">
+                <input type="hidden" name="template_workout_id" value="{{ t.id }}">
+                <select name="exercise_id" required
+                        class="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <option value="">Übung wählen...</option>
+                    {% for e in all_exercises %}
+                    <option value="{{ e.id }}">{{ e.name }}</option>
+                    {% endfor %}
+                </select>
+                <div class="flex gap-2">
+                    <input type="number" name="target_sets" value="3" min="1" max="10"
+                           class="w-16 bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-sm text-white text-center">
+                    <span class="text-stone-500 text-sm self-center">×</span>
+                    <input type="number" name="target_reps_min" value="8" min="1" max="30"
+                           class="w-14 bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-sm text-white text-center">
+                    <span class="text-stone-500 text-sm self-center">-</span>
+                    <input type="number" name="target_reps_max" value="12" min="1" max="30"
+                           class="w-14 bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-sm text-white text-center">
+                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg">
+                        +
+                    </button>
+                </div>
+            </form>
+        </details>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

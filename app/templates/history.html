@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-4">
+    <h1 class="text-2xl font-bold">Verlauf</h1>
+
+    {% if workouts %}
+    <div class="space-y-2">
+        {% for w in workouts %}
+        <a href="/workout/{{ w.id }}"
+           class="block bg-stone-900 rounded-xl p-4 border border-stone-800 hover:border-stone-700 transition-colors">
+            <div class="flex items-center justify-between mb-2">
+                <p class="font-medium">{{ w.name }}</p>
+                <span class="text-xs text-stone-500">{{ w.date.strftime('%d.%m.%Y') }}</span>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                {% for we in w.exercises %}
+                {% set has_data = false %}
+                {% for s in we.sets %}
+                {% if s.is_completed and s.weight %}
+                {% set has_data = true %}
+                {% endif %}
+                {% endfor %}
+                {% if has_data %}
+                <span class="text-xs bg-stone-800 text-stone-300 px-2 py-0.5 rounded-full">{{ we.exercise.name }}</span>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-12">
+        <p class="text-stone-500">Noch keine abgeschlossenen Workouts</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-4">
+    <div>
+        <a href="/exercises" class="text-stone-500 text-sm hover:text-stone-300">← Zurück</a>
+        <h1 class="text-2xl font-bold mt-1">{{ exercise.name }}</h1>
+        {% if exercise.muscle_group %}
+        <span class="text-sm text-stone-500">{{ exercise.muscle_group.name }}</span>
+        {% endif %}
+    </div>
+
+    <div class="bg-stone-900 rounded-2xl p-4 border border-stone-800">
+        <h2 class="text-sm font-medium text-stone-400 mb-3">Kraftverlauf (geschätzter 1RM)</h2>
+        {% if trend %}
+        <canvas id="rmChart" height="150"></canvas>
+        <script>
+            const rmCtx = document.getElementById('rmChart');
+            new Chart(rmCtx, {
+                type: 'line',
+                data: {
+                    labels: [{% for t in trend %}'{{ t.date }}'{% if not loop.last %},{% endif %}{% endfor %}],
+                    datasets: [{
+                        label: 'e1RM (kg)',
+                        data: [{% for t in trend %}{{ t.e1rm }}{% if not loop.last %},{% endif %}{% endfor %}],
+                        borderColor: '#34d399',
+                        backgroundColor: 'rgba(52, 211, 153, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#34d399',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#78716c', font: { size: 11 } } } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#78716c', font: { size: 10 } } },
+                        y: { grid: { color: '#292524' }, ticks: { color: '#78716c', font: { size: 10 } } }
+                    }
+                }
+            });
+        </script>
+        {% else %}
+        <p class="text-stone-500 text-sm text-center py-6">Noch keine Daten vorhanden. Sobald du Sätze einträgst, erscheint hier der Verlauf.</p>
+        {% endif %}
+    </div>
+
+    {% if trend %}
+    <div class="bg-stone-900 rounded-2xl p-4 border border-stone-800">
+        <h2 class="text-sm font-medium text-stone-400 mb-3">Letzte Leistungen</h2>
+        <div class="space-y-2">
+            {% set best = trend|sort(attribute='e1rm', reverse=true)|first %}
+            <div class="flex items-center justify-between bg-stone-800/50 rounded-lg px-3 py-2">
+                <span class="text-sm text-stone-400">Bester 1RM</span>
+                <span class="font-bold text-emerald-400">{{ best.e1rm }} kg</span>
+            </div>
+            {% set latest = trend|last %}
+            <div class="flex items-center justify-between bg-stone-800/50 rounded-lg px-3 py-2">
+                <span class="text-sm text-stone-400">Letzter 1RM</span>
+                <span class="font-medium">{{ latest.e1rm }} kg</span>
+            </div>
+            {% if trend|length > 1 %}
+            {% set change = (latest.e1rm - trend[0].e1rm) %}
+            <div class="flex items-center justify-between bg-stone-800/50 rounded-lg px-3 py-2">
+                <span class="text-sm text-stone-400">Veränderung (ges.)</span>
+                <span class="font-medium {% if change > 0 %}text-emerald-400{% elif change < 0 %}text-red-400{% else %}text-stone-400{% endif %}">
+                    {{ "%+.1f"|format(change) }} kg
+                </span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if recent_workouts %}
+    <div class="bg-stone-900 rounded-2xl p-4 border border-stone-800">
+        <h2 class="text-sm font-medium text-stone-400 mb-3">Letzte Workouts</h2>
+        <div class="space-y-2">
+            {% for we in recent_workouts %}
+            <a href="/workout/{{ we.workout_id }}" class="block bg-stone-800/30 rounded-lg px-3 py-2 hover:bg-stone-800/50 transition-colors">
+                <div class="flex justify-between text-sm">
+                    <span class="text-stone-300">{{ we.workout.name }}</span>
+                    <span class="text-xs text-stone-500">{{ we.workout.date.strftime('%d.%m.') }}</span>
+                </div>
+                <div class="flex gap-2 mt-1 text-xs text-stone-500">
+                    <span>{{ we.sets|length }} Sätze</span>
+                    {% for s in we.sets %}
+                    {% if s.is_completed and s.weight %}
+                    <span>{{ s.weight }}kg × {{ s.reps }}</span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
