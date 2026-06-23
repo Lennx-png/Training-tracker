@@ -62,6 +62,7 @@ def pin_submit(request: Request, pin: str = Form(...), next: str = Form("/")):
             value=serializer.dumps("authorized"),
             max_age=86400 * 30,
             httponly=True,
+            samesite="lax",
         )
         return response
     return templates.TemplateResponse(
