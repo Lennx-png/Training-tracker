@@ -33,18 +33,18 @@ def startup():
 
 @app.middleware("http")
 async def check_pin(request: Request, call_next):
-    if request.url.path.startswith("/static") or request.url.path == "/pin":
+    if request.url.path.startswith("/static") or request.url.path in ("/pin", "/api/"):
         return await call_next(request)
-    pin_cookie = request.cookies.get("session_pin")
-    if pin_cookie:
-        try:
-            serializer.loads(pin_cookie, max_age=86400 * 30)
-            return await call_next(request)
-        except Exception:
-            pass
-    if request.url.path.startswith("/api/"):
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-    return RedirectResponse(url=f"/pin?next={request.url.path}")
+    if request.url.path == "/":
+        pin_cookie = request.cookies.get("session_pin")
+        if pin_cookie:
+            try:
+                serializer.loads(pin_cookie, max_age=86400 * 30)
+                return await call_next(request)
+            except Exception:
+                pass
+        return RedirectResponse(url="/pin", status_code=302)
+    return await call_next(request)
 
 
 # ===== PIN =====
