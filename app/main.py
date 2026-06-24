@@ -339,6 +339,9 @@ def workout_detail(
     all_exercises = (
         db.query(models.Exercise).order_by(models.Exercise.name).all()
     )
+    muscle_groups = (
+        db.query(models.MuscleGroup).order_by(models.MuscleGroup.name).all()
+    )
 
     return templates.TemplateResponse(
         "workout_detail.html",
@@ -348,6 +351,7 @@ def workout_detail(
             "workout": workout,
             "recs": recs,
             "all_exercises": all_exercises,
+            "muscle_groups": muscle_groups,
         },
     )
 
@@ -499,6 +503,56 @@ def add_exercise_to_workout(
     we = models.WorkoutExercise(
         workout_id=workout_id,
         exercise_id=exercise_id,
+        sort_order=max_order + 1,
+    )
+    db.add(we)
+    db.flush()
+    for i in range(target_sets):
+        s = models.Set(
+            workout_exercise_id=we.id,
+            set_number=i + 1,
+            is_warmup=(i == 0),
+        )
+        db.add(s)
+    db.commit()
+    return RedirectResponse(url=f"/workout/{workout_id}", status_code=302)
+
+
+@app.post("/workout/{workout_id}/add-custom-exercise")
+def add_custom_exercise(
+    request: Request,
+    workout_id: int,
+    exercise_name: str = Form(...),
+    muscle_group_id: Optional[int] = Form(None),
+    category: str = Form("isolation"),
+    target_sets: int = Form(3),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_user),
+):
+    existing = (
+        db.query(models.Exercise)
+        .filter(models.Exercise.name == exercise_name.strip())
+        .first()
+    )
+    if existing:
+        exercise = existing
+    else:
+        exercise = models.Exercise(
+            name=exercise_name.strip(),
+            muscle_group_id=muscle_group_id if muscle_group_id else None,
+            category=category,
+        )
+        db.add(exercise)
+        db.flush()
+
+    max_order = (
+        db.query(models.WorkoutExercise)
+        .filter(models.WorkoutExercise.workout_id == workout_id)
+        .count()
+    )
+    we = models.WorkoutExercise(
+        workout_id=workout_id,
+        exercise_id=exercise.id,
         sort_order=max_order + 1,
     )
     db.add(we)
