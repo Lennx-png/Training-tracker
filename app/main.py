@@ -544,6 +544,7 @@ def calendar_page(
             "prev_y": prev_y,
             "next_m": next_m,
             "next_y": next_y,
+            "date": date,
         },
     )
 
