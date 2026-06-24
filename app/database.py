@@ -29,6 +29,11 @@ def run_migrations():
             conn.execute(text("ALTER TABLE workouts ADD COLUMN user_id INTEGER"))
             conn.commit()
 
+    if "timer_started_at" not in existing_cols:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE workouts ADD COLUMN timer_started_at TIMESTAMP"))
+            conn.commit()
+
     existing_cols_we = {c["name"] for c in inspector.get_columns("weight_entries")}
     if "user_id" not in existing_cols_we:
         with engine.connect() as conn:

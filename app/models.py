@@ -54,6 +54,7 @@ class Workout(Base):
     notes = Column(Text, nullable=True)
     is_completed = Column(Boolean, default=False)
     duration_minutes = Column(Integer, nullable=True)
+    timer_started_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     user = relationship("User", back_populates="workouts")

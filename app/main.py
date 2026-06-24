@@ -352,11 +352,26 @@ def workout_detail(
     )
 
 
-@app.post("/workout/{workout_id}/timer")
-def save_timer(
-    request: Request,
+@app.get("/workout/{workout_id}/timer-state")
+def get_timer_state(
     workout_id: int,
-    minutes: int = Form(...),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_user),
+):
+    workout = (
+        db.query(models.Workout)
+        .filter(models.Workout.id == workout_id, models.Workout.user_id == user.id)
+        .first()
+    )
+    if not workout or not workout.timer_started_at:
+        return {"running": False, "elapsed_seconds": 0}
+    elapsed = int((datetime.utcnow() - workout.timer_started_at).total_seconds())
+    return {"running": True, "elapsed_seconds": max(0, elapsed)}
+
+
+@app.post("/workout/{workout_id}/timer/start")
+def start_timer(
+    workout_id: int,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_user),
 ):
@@ -366,7 +381,26 @@ def save_timer(
         .first()
     )
     if workout:
-        workout.duration_minutes = max(minutes, 1)
+        workout.timer_started_at = datetime.utcnow()
+        db.commit()
+    return {"ok": True}
+
+
+@app.post("/workout/{workout_id}/timer/stop")
+def stop_timer(
+    workout_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_user),
+):
+    workout = (
+        db.query(models.Workout)
+        .filter(models.Workout.id == workout_id, models.Workout.user_id == user.id)
+        .first()
+    )
+    if workout and workout.timer_started_at:
+        elapsed = int((datetime.utcnow() - workout.timer_started_at).total_seconds())
+        workout.duration_minutes = max(round(elapsed / 60), 1)
+        workout.timer_started_at = None
         db.commit()
     return {"ok": True}
 

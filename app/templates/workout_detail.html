@@ -133,7 +133,6 @@
     </details>
 
     <script>
-        // Auto-fill weight recommendation on click
         document.querySelectorAll('.rec-apply').forEach(btn => {
             btn.addEventListener('click', function() {
                 const weight = this.dataset.weight;
@@ -142,27 +141,34 @@
             });
         });
 
-        // Timer
+        // Timer – server-persisted (überlebt Server-Neustart)
         let timerInterval = null;
         let seconds = 0;
-        const savedSeconds = parseInt(localStorage.getItem('timer_{{ workout.id }}') || '0');
-        if (savedSeconds) seconds = savedSeconds;
-        updateDisplay();
 
-        function toggleTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-                document.getElementById('timer-icon').textContent = '▶';
-                saveTimer();
-            } else {
-                timerInterval = setInterval(() => {
-                    seconds++;
-                    updateDisplay();
-                    localStorage.setItem('timer_{{ workout.id }}', seconds);
-                }, 1000);
-                document.getElementById('timer-icon').textContent = '⏸';
+        async function initTimer() {
+            const res = await fetch('/workout/{{ workout.id }}/timer-state');
+            const state = await res.json();
+            if (state.running) {
+                seconds = state.elapsed_seconds;
+                startCounting();
             }
+            updateDisplay();
+        }
+
+        function startCounting() {
+            if (timerInterval) return;
+            timerInterval = setInterval(() => {
+                seconds++;
+                updateDisplay();
+            }, 1000);
+            document.getElementById('timer-icon').textContent = '⏸';
+        }
+
+        function stopCounting() {
+            if (!timerInterval) return;
+            clearInterval(timerInterval);
+            timerInterval = null;
+            document.getElementById('timer-icon').textContent = '▶';
         }
 
         function updateDisplay() {
@@ -171,27 +177,23 @@
             document.getElementById('timer-display').textContent = `${m}:${s}`;
         }
 
-        async function saveTimer() {
-            const mins = Math.round(seconds / 60);
-            if (mins < 1) return;
-            localStorage.removeItem('timer_{{ workout.id }}');
-            await fetch('/workout/{{ workout.id }}/timer', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: `minutes=${mins}`
-            });
+        async function toggleTimer() {
+            if (timerInterval) {
+                stopCounting();
+                await fetch('/workout/{{ workout.id }}/timer/stop', { method: 'POST' });
+            } else {
+                await fetch('/workout/{{ workout.id }}/timer/start', { method: 'POST' });
+                startCounting();
+            }
         }
 
-        // Auto-save on page unload
         window.addEventListener('beforeunload', () => {
             if (timerInterval) {
-                clearInterval(timerInterval);
-                const mins = Math.round(seconds / 60);
-                if (mins > 0) {
-                    navigator.sendBeacon('/workout/{{ workout.id }}/timer', `minutes=${mins}`);
-                }
+                navigator.sendBeacon('/workout/{{ workout.id }}/timer/stop', '');
             }
         });
+
+        initTimer();
     </script>
     {% endif %}
 
