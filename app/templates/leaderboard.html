@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold">Leaderboard</h1>
+
+    <div>
+        <label class="block text-sm font-medium text-stone-300 mb-2">Übung auswählen</label>
+        <select id="exercise-select"
+            class="w-full bg-stone-800 border border-stone-700 rounded-lg px-4 py-3 text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+            <option value="">— Bitte wählen —</option>
+            {% for ex in exercises %}
+            <option value="{{ ex.id }}">{{ ex.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div id="leaderboard-result" class="hidden">
+        <h2 class="text-lg font-semibold text-emerald-400" id="leaderboard-title">Rangliste</h2>
+        <div class="mt-3 space-y-2" id="leaderboard-entries"></div>
+    </div>
+
+    <div>
+        <h2 class="text-lg font-semibold text-emerald-400 mb-3">Wöchentliches Volumen</h2>
+        <div id="weekly-volume" class="space-y-2"></div>
+    </div>
+</div>
+
+<script>
+async function loadLeaderboard(exerciseId) {
+    const resultDiv = document.getElementById('leaderboard-result');
+    const title = document.getElementById('leaderboard-title');
+    const entries = document.getElementById('leaderboard-entries');
+
+    if (!exerciseId) {
+        resultDiv.classList.add('hidden');
+        return;
+    }
+
+    const select = document.getElementById('exercise-select');
+    const selectedText = select.options[select.selectedIndex].text;
+    title.textContent = `Rangliste — ${selectedText}`;
+
+    const res = await fetch(`/api/leaderboard/exercise/${exerciseId}`);
+    const data = await res.json();
+
+    entries.innerHTML = '';
+    if (data.entries.length === 0) {
+        entries.innerHTML = '<p class="text-stone-400 text-sm">Noch keine Daten für diese Übung.</p>';
+    } else {
+        data.entries.forEach((entry, i) => {
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-stone-800/50 rounded-lg px-4 py-3';
+            div.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <span class="text-stone-400 w-6 text-center">${medal}</span>
+                    <span class="font-medium">${entry.name}</span>
+                </div>
+                <div class="text-right">
+                    <span class="text-emerald-400 font-semibold">${entry.weight} kg</span>
+                    <span class="text-stone-400 text-sm ml-2">× ${entry.reps}</span>
+                    <span class="text-stone-500 text-xs ml-2">(e1RM: ${entry.e1rm})</span>
+                </div>
+            `;
+            entries.appendChild(div);
+        });
+    }
+    resultDiv.classList.remove('hidden');
+}
+
+async function loadWeeklyVolume() {
+    const container = document.getElementById('weekly-volume');
+    const res = await fetch('/api/leaderboard/weekly-volume');
+    const data = await res.json();
+
+    container.innerHTML = '';
+    if (data.entries.length === 0) {
+        container.innerHTML = '<p class="text-stone-400 text-sm">Diese Woche noch keine Workouts.</p>';
+    } else {
+        data.entries.forEach((entry, i) => {
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between bg-stone-800/50 rounded-lg px-4 py-3';
+            div.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <span class="text-stone-400 w-6 text-center">${medal}</span>
+                    <span class="font-medium">${entry.name}</span>
+                </div>
+                <span class="text-emerald-400 font-semibold">${entry.workouts} Workouts</span>
+            `;
+            container.appendChild(div);
+        });
+    }
+}
+
+document.getElementById('exercise-select').addEventListener('change', (e) => {
+    loadLeaderboard(e.target.value);
+});
+
+loadWeeklyVolume();
+</script>
+{% endblock %}

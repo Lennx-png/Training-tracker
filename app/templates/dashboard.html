@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Dashboard</h1>
+        <span class="text-sm text-stone-400">{{ today.strftime('%d.%m.%Y') }}</span>
+    </div>
+
+    {% if not today_workout %}
+    <div class="bg-gradient-to-r from-emerald-900 to-emerald-800 rounded-2xl p-6">
+        <h2 class="text-lg font-semibold text-emerald-100 mb-1">Heute trainieren?</h2>
+        <p class="text-emerald-300 text-sm mb-4">Starte ein neues Training für heute.</p>
+        <div class="flex gap-3">
+            <a href="/workout/new"
+               class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-stone-900 font-semibold text-center py-3 rounded-xl transition-colors">
+                Neues Training
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-emerald-900/30 border border-emerald-800/50 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="font-semibold">{{ today_workout.name }}</h2>
+            <span class="text-xs text-emerald-400 bg-emerald-900/50 px-2 py-1 rounded-full">Aktiv</span>
+        </div>
+        <a href="/workout/{{ today_workout.id }}"
+           class="block text-center bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition-colors">
+            Weiter machen
+        </a>
+    </div>
+    {% endif %}
+
+    {% if last_workout %}
+    <div class="bg-stone-900 rounded-2xl p-4">
+        <h2 class="text-sm font-medium text-stone-400 mb-2">Letztes Training</h2>
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="font-medium">{{ last_workout.name }}</p>
+                <p class="text-xs text-stone-500">{{ last_workout.date.strftime('%d.%m.%Y') }}</p>
+            </div>
+            <a href="/workout/{{ last_workout.id }}" class="text-emerald-400 text-sm hover:underline">Details</a>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if week_workouts > 0 %}
+    <div class="bg-stone-900 rounded-2xl p-4">
+        <h2 class="text-sm font-medium text-stone-400 mb-2">Diese Woche</h2>
+        <div class="flex items-center gap-3">
+            <span class="text-3xl font-bold text-emerald-400">{{ week_workouts }}</span>
+            <span class="text-stone-400 text-sm">Trainingseinheiten</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if latest_weight %}
+    <div class="bg-stone-900 rounded-2xl p-4">
+        <h2 class="text-sm font-medium text-stone-400 mb-2">Letztes Körpergewicht</h2>
+        <div class="flex items-center gap-3">
+            <span class="text-3xl font-bold">{{ latest_weight.weight }}</span>
+            <span class="text-stone-400">kg</span>
+            <span class="text-xs text-stone-500 ml-auto">{{ latest_weight.date.strftime('%d.%m.%Y') }}</span>
+        </div>
+        <a href="/weight" class="text-emerald-400 text-sm hover:underline mt-2 inline-block">Verlauf ansehen</a>
+    </div>
+    {% endif %}
+
+    {% if weight_entries|length > 1 %}
+    <div class="bg-stone-900 rounded-2xl p-4">
+        <h2 class="text-sm font-medium text-stone-400 mb-3">Gewichtsverlauf</h2>
+        <canvas id="weightChart" height="120"></canvas>
+    </div>
+    <script>
+        const ctx = document.getElementById('weightChart');
+        if (ctx) {
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [{% for e in weight_entries %}'{{ e.date.strftime("%d.%m") }}'{% if not loop.last %},{% endif %}{% endfor %}],
+                    datasets: [{
+                        data: [{% for e in weight_entries %}{{ e.weight }}{% if not loop.last %},{% endif %}{% endfor %}],
+                        borderColor: '#34d399',
+                        backgroundColor: 'rgba(52, 211, 153, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#34d399',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#78716c', font: { size: 10 } } },
+                        y: { grid: { color: '#292524' }, ticks: { color: '#78716c', font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+    </script>
+    {% endif %}
+
+    <div class="grid grid-cols-2 gap-3">
+        <a href="/workout/new"
+           class="bg-stone-900 hover:bg-stone-800 rounded-xl p-4 text-center transition-colors border border-stone-800">
+            <div class="text-2xl mb-1">🏋️</div>
+            <span class="text-sm font-medium">Training</span>
+        </a>
+        <a href="/history"
+           class="bg-stone-900 hover:bg-stone-800 rounded-xl p-4 text-center transition-colors border border-stone-800">
+            <div class="text-2xl mb-1">📋</div>
+            <span class="text-sm font-medium">Verlauf</span>
+        </a>
+        <a href="/weight"
+           class="bg-stone-900 hover:bg-stone-800 rounded-xl p-4 text-center transition-colors border border-stone-800">
+            <div class="text-2xl mb-1">⚖️</div>
+            <span class="text-sm font-medium">Gewicht</span>
+        </a>
+        <a href="/exercises"
+           class="bg-stone-900 hover:bg-stone-800 rounded-xl p-4 text-center transition-colors border border-stone-800">
+            <div class="text-2xl mb-1">📚</div>
+            <span class="text-sm font-medium">Übungen</span>
+        </a>
+    </div>
+</div>
+{% endblock %}

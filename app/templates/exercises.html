@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold">Übungen</h1>
+
+    {% for group in groups %}
+    <div class="bg-stone-900 rounded-2xl overflow-hidden border border-stone-800">
+        <div class="bg-stone-800/50 px-4 py-2.5">
+            <h2 class="font-medium text-sm">{{ group.name }}</h2>
+        </div>
+        {% if group.exercises %}
+        <div class="divide-y divide-stone-800">
+            {% for ex in group.exercises %}
+            <a href="/exercise/{{ ex.id }}" class="px-4 py-3 flex items-center justify-between hover:bg-stone-800/50 transition-colors">
+                <div>
+                    <p class="text-sm font-medium">{{ ex.name }}</p>
+                    <p class="text-xs text-stone-500">
+                        {% if ex.category == "compound" %}Verbundübung{% else %}Isolation{% endif %}
+                    </p>
+                </div>
+                <svg class="w-4 h-4 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="px-4 py-4 text-sm text-stone-500">Keine Übungen in dieser Gruppe</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+/* Minimalist custom styles for Training Tracker */
+* { -webkit-tap-highlight-color: transparent; }
+
+html, body { min-height: 100vh; }
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
+::selection { background: rgba(52, 211, 153, 0.3); }
+
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+select { -webkit-appearance: none; appearance: none; }
+
+summary::-webkit-details-marker { display: none; }
+
+/* Smooth transitions */
+a, button { transition: all 0.15s ease; }
+
+/* Focus styles */
+input:focus, select:focus, button:focus-visible { outline: none; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #44403c; border-radius: 2px; }

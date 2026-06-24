@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Workouts</h1>
+        <a href="/workout/new" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+            + Neu
+        </a>
+    </div>
+
+    {% if workouts %}
+    <div class="space-y-2">
+        {% for w in workouts %}
+        <a href="/workout/{{ w.id }}"
+           class="block bg-stone-900 rounded-xl p-4 border border-stone-800 hover:border-stone-700 transition-colors">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="font-medium">{{ w.name }}</p>
+                    <p class="text-xs text-stone-500">{{ w.date.strftime('%d.%m.%Y') }}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    {% if w.is_completed %}
+                    <span class="text-emerald-400 text-xs bg-emerald-900/30 px-2 py-0.5 rounded-full">Erledigt</span>
+                    {% else %}
+                    <span class="text-amber-400 text-xs bg-amber-900/30 px-2 py-0.5 rounded-full">Offen</span>
+                    {% endif %}
+                    <span class="text-stone-400 text-xs">{{ w.exercises|length }} Übungen</span>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-12">
+        <p class="text-stone-500 text-lg mb-2">Noch keine Workouts</p>
+        <p class="text-stone-600 text-sm">Starte dein erstes Training!</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,8 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+sqlalchemy==2.0.31
+# psycopg2-binary==2.9.9  # nur für PostgreSQL auf Render
+jinja2==3.1.2
+python-multipart==0.0.6
+itsdangerous==2.1.2
+pytz==2023.3
