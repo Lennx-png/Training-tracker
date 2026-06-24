@@ -967,6 +967,122 @@ def leaderboard_weekly_volume(
     }
 
 
+@app.get("/api/leaderboard/monthly-workouts")
+def leaderboard_monthly_workouts(
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+    first = date(today.year, today.month, 1)
+    if today.month == 12:
+        last = date(today.year + 1, 1, 1) - timedelta(days=1)
+    else:
+        last = date(today.year, today.month + 1, 1) - timedelta(days=1)
+    rows = (
+        db.query(
+            models.User.name,
+            models.Workout.id,
+        )
+        .select_from(models.Workout)
+        .join(models.User, models.Workout.user_id == models.User.id)
+        .filter(
+            models.Workout.date >= first,
+            models.Workout.date <= last,
+            models.Workout.is_completed == True,
+        )
+        .all()
+    )
+    counts = {}
+    for name, _ in rows:
+        counts[name] = counts.get(name, 0) + 1
+    sorted_entries = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "entries": [
+            {"name": name, "workouts": count} for name, count in sorted_entries
+        ]
+    }
+
+
+@app.get("/api/leaderboard/monthly-volume")
+def leaderboard_monthly_volume(
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+    first = date(today.year, today.month, 1)
+    if today.month == 12:
+        last = date(today.year + 1, 1, 1) - timedelta(days=1)
+    else:
+        last = date(today.year, today.month + 1, 1) - timedelta(days=1)
+    rows = (
+        db.query(
+            models.User.name,
+            models.Set.weight,
+            models.Set.reps,
+        )
+        .select_from(models.Set)
+        .join(models.WorkoutExercise, models.Set.workout_exercise_id == models.WorkoutExercise.id)
+        .join(models.Workout, models.WorkoutExercise.workout_id == models.Workout.id)
+        .join(models.User, models.Workout.user_id == models.User.id)
+        .filter(
+            models.Workout.date >= first,
+            models.Workout.date <= last,
+            models.Workout.is_completed == True,
+            models.Set.is_completed == True,
+            models.Set.is_warmup == False,
+            models.Set.weight.isnot(None),
+            models.Set.reps.isnot(None),
+        )
+        .all()
+    )
+    volume = {}
+    for name, weight, reps in rows:
+        volume[name] = volume.get(name, 0) + weight * reps
+    sorted_entries = sorted(volume.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "entries": [
+            {"name": name, "volume": round(v)} for name, v in sorted_entries
+        ]
+    }
+
+
+@app.get("/api/leaderboard/leg-sets")
+def leaderboard_leg_sets(
+    db: Session = Depends(get_db),
+):
+    leg_exercise_ids = (
+        db.query(models.Exercise.id)
+        .join(models.MuscleGroup)
+        .filter(
+            models.MuscleGroup.name.like("Beine%") | models.MuscleGroup.name.like("Waden%")
+        )
+        .subquery()
+    )
+    rows = (
+        db.query(
+            models.User.name,
+            models.Set.id,
+        )
+        .select_from(models.Set)
+        .join(models.WorkoutExercise, models.Set.workout_exercise_id == models.WorkoutExercise.id)
+        .join(models.Workout, models.WorkoutExercise.workout_id == models.Workout.id)
+        .join(models.User, models.Workout.user_id == models.User.id)
+        .filter(
+            models.WorkoutExercise.exercise_id.in_(leg_exercise_ids),
+            models.Set.is_completed == True,
+            models.Set.is_warmup == False,
+        )
+        .all()
+    )
+    counts = {}
+    for name, _ in rows:
+        counts[name] = counts.get(name, 0) + 1
+    sorted_entries = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "entries": [
+            {"name": name, "sets": count} for name, count in sorted_entries
+        ]
+    }
+
+
 # ===== LEADERBOARD (alle Übungen auf einmal, für Dropdown) =====
 @app.get("/api/leaderboard/exercises")
 def leaderboard_exercises(

@@ -1,9 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="space-y-6">
-    <h1 class="text-2xl font-bold">Leaderboard</h1>
+    <h1 class="text-2xl font-bold">Rangliste</h1>
 
-    <div>
+    <div class="flex gap-2 flex-wrap">
+        <button data-filter="exercise" class="filter-btn bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Pro Übung</button>
+        <button data-filter="monthly-workouts" class="filter-btn bg-stone-700 hover:bg-stone-600 text-stone-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Workouts (Monat)</button>
+        <button data-filter="monthly-volume" class="filter-btn bg-stone-700 hover:bg-stone-600 text-stone-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Volumen (Monat)</button>
+        <button data-filter="leg-sets" class="filter-btn bg-stone-700 hover:bg-stone-600 text-stone-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Leg Days</button>
+    </div>
+
+    <div id="filter-exercise" class="filter-panel">
         <label class="block text-sm font-medium text-stone-300 mb-2">Übung auswählen</label>
         <select id="exercise-select"
             class="w-full bg-stone-800 border border-stone-700 rounded-lg px-4 py-3 text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
@@ -12,91 +19,156 @@
             <option value="{{ ex.id }}">{{ ex.name }}</option>
             {% endfor %}
         </select>
+        <div id="exercise-result" class="mt-4 space-y-2"></div>
     </div>
 
-    <div id="leaderboard-result" class="hidden">
-        <h2 class="text-lg font-semibold text-emerald-400" id="leaderboard-title">Rangliste</h2>
-        <div class="mt-3 space-y-2" id="leaderboard-entries"></div>
+    <div id="filter-monthly-workouts" class="filter-panel hidden">
+        <h2 class="text-lg font-semibold text-emerald-400 mb-3">Workouts diesen Monat</h2>
+        <div id="monthly-workouts-result" class="space-y-2"></div>
     </div>
 
-    <div>
-        <h2 class="text-lg font-semibold text-emerald-400 mb-3">Wöchentliches Volumen</h2>
-        <div id="weekly-volume" class="space-y-2"></div>
+    <div id="filter-monthly-volume" class="filter-panel hidden">
+        <h2 class="text-lg font-semibold text-emerald-400 mb-3">Volumen diesen Monat (kg × Reps)</h2>
+        <div id="monthly-volume-result" class="space-y-2"></div>
+    </div>
+
+    <div id="filter-leg-sets" class="filter-panel hidden">
+        <h2 class="text-lg font-semibold text-emerald-400 mb-3">Leg Days – wer trainiert am meisten Beine?</h2>
+        <p class="text-stone-400 text-sm mb-3">Gezählt werden abgeschlossene Sätze mit Beinübungen.</p>
+        <div id="leg-sets-result" class="space-y-2"></div>
     </div>
 </div>
 
 <script>
-async function loadLeaderboard(exerciseId) {
-    const resultDiv = document.getElementById('leaderboard-result');
-    const title = document.getElementById('leaderboard-title');
-    const entries = document.getElementById('leaderboard-entries');
+function medal(i) {
+    return i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+}
 
-    if (!exerciseId) {
-        resultDiv.classList.add('hidden');
-        return;
-    }
+// === Filter buttons ===
+document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => {
+            b.classList.remove('bg-emerald-600', 'hover:bg-emerald-500', 'text-white');
+            b.classList.add('bg-stone-700', 'hover:bg-stone-600', 'text-stone-200');
+        });
+        btn.classList.remove('bg-stone-700', 'hover:bg-stone-600', 'text-stone-200');
+        btn.classList.add('bg-emerald-600', 'hover:bg-emerald-500', 'text-white');
 
-    const select = document.getElementById('exercise-select');
-    const selectedText = select.options[select.selectedIndex].text;
-    title.textContent = `Rangliste — ${selectedText}`;
+        document.querySelectorAll('.filter-panel').forEach(p => p.classList.add('hidden'));
+        document.getElementById(`filter-${btn.dataset.filter}`).classList.remove('hidden');
 
+        if (btn.dataset.filter === 'monthly-workouts') loadMonthlyWorkouts();
+        if (btn.dataset.filter === 'monthly-volume') loadMonthlyVolume();
+        if (btn.dataset.filter === 'leg-sets') loadLegSets();
+    });
+});
+
+// === Exercise leaderboard ===
+document.getElementById('exercise-select').addEventListener('change', (e) => {
+    if (e.target.value) loadExerciseBoard(e.target.value);
+});
+
+async function loadExerciseBoard(exerciseId) {
+    const container = document.getElementById('exercise-result');
     const res = await fetch(`/api/leaderboard/exercise/${exerciseId}`);
     const data = await res.json();
 
-    entries.innerHTML = '';
+    const select = document.getElementById('exercise-select');
+    const name = select.options[select.selectedIndex].text;
+    container.innerHTML = `<h3 class="text-sm text-stone-400 mb-2">${name}</h3>`;
+
     if (data.entries.length === 0) {
-        entries.innerHTML = '<p class="text-stone-400 text-sm">Noch keine Daten für diese Übung.</p>';
-    } else {
-        data.entries.forEach((entry, i) => {
-            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
-            const div = document.createElement('div');
-            div.className = 'flex items-center justify-between bg-stone-800/50 rounded-lg px-4 py-3';
-            div.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <span class="text-stone-400 w-6 text-center">${medal}</span>
-                    <span class="font-medium">${entry.name}</span>
-                </div>
-                <div class="text-right">
-                    <span class="text-emerald-400 font-semibold">${entry.weight} kg</span>
-                    <span class="text-stone-400 text-sm ml-2">× ${entry.reps}</span>
-                    <span class="text-stone-500 text-xs ml-2">(e1RM: ${entry.e1rm})</span>
-                </div>
-            `;
-            entries.appendChild(div);
-        });
+        container.innerHTML += '<p class="text-stone-500 text-sm">Keine Daten.</p>';
+        return;
     }
-    resultDiv.classList.remove('hidden');
+    data.entries.forEach((entry, i) => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between bg-stone-800/50 rounded-lg px-4 py-3';
+        div.innerHTML = `
+            <div class="flex items-center gap-3">
+                <span class="text-stone-400 w-6 text-center">${medal(i)}</span>
+                <span class="font-medium">${entry.name}</span>
+            </div>
+            <div class="text-right">
+                <span class="text-emerald-400 font-semibold">${entry.weight} kg</span>
+                <span class="text-stone-400 text-sm ml-2">× ${entry.reps}</span>
+                <span class="text-stone-500 text-xs ml-2">(e1RM: ${entry.e1rm})</span>
+            </div>
+        `;
+        container.appendChild(div);
+    });
 }
 
-async function loadWeeklyVolume() {
-    const container = document.getElementById('weekly-volume');
-    const res = await fetch('/api/leaderboard/weekly-volume');
+// === Monthly workouts ===
+async function loadMonthlyWorkouts() {
+    const container = document.getElementById('monthly-workouts-result');
+    const res = await fetch('/api/leaderboard/monthly-workouts');
     const data = await res.json();
-
     container.innerHTML = '';
     if (data.entries.length === 0) {
-        container.innerHTML = '<p class="text-stone-400 text-sm">Diese Woche noch keine Workouts.</p>';
-    } else {
-        data.entries.forEach((entry, i) => {
-            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
-            const div = document.createElement('div');
-            div.className = 'flex items-center justify-between bg-stone-800/50 rounded-lg px-4 py-3';
-            div.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <span class="text-stone-400 w-6 text-center">${medal}</span>
-                    <span class="font-medium">${entry.name}</span>
-                </div>
-                <span class="text-emerald-400 font-semibold">${entry.workouts} Workouts</span>
-            `;
-            container.appendChild(div);
-        });
+        container.innerHTML = '<p class="text-stone-500 text-sm">Diesen Monat noch keine Workouts.</p>';
+        return;
     }
+    data.entries.forEach((entry, i) => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between bg-stone-800/50 rounded-lg px-4 py-3';
+        div.innerHTML = `
+            <div class="flex items-center gap-3">
+                <span class="text-stone-400 w-6 text-center">${medal(i)}</span>
+                <span class="font-medium">${entry.name}</span>
+            </div>
+            <span class="text-emerald-400 font-semibold">${entry.workouts} Workouts</span>
+        `;
+        container.appendChild(div);
+    });
 }
 
-document.getElementById('exercise-select').addEventListener('change', (e) => {
-    loadLeaderboard(e.target.value);
-});
+// === Monthly volume ===
+async function loadMonthlyVolume() {
+    const container = document.getElementById('monthly-volume-result');
+    const res = await fetch('/api/leaderboard/monthly-volume');
+    const data = await res.json();
+    container.innerHTML = '';
+    if (data.entries.length === 0) {
+        container.innerHTML = '<p class="text-stone-500 text-sm">Diesen Monat noch kein Volumen.</p>';
+        return;
+    }
+    data.entries.forEach((entry, i) => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between bg-stone-800/50 rounded-lg px-4 py-3';
+        div.innerHTML = `
+            <div class="flex items-center gap-3">
+                <span class="text-stone-400 w-6 text-center">${medal(i)}</span>
+                <span class="font-medium">${entry.name}</span>
+            </div>
+            <span class="text-emerald-400 font-semibold">${entry.volume.toLocaleString()} kg</span>
+        `;
+        container.appendChild(div);
+    });
+}
 
-loadWeeklyVolume();
+// === Leg sets ===
+async function loadLegSets() {
+    const container = document.getElementById('leg-sets-result');
+    const res = await fetch('/api/leaderboard/leg-sets');
+    const data = await res.json();
+    container.innerHTML = '';
+    if (data.entries.length === 0) {
+        container.innerHTML = '<p class="text-stone-500 text-sm">Keine Beindaten vorhanden.</p>';
+        return;
+    }
+    data.entries.forEach((entry, i) => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between bg-stone-800/50 rounded-lg px-4 py-3';
+        div.innerHTML = `
+            <div class="flex items-center gap-3">
+                <span class="text-stone-400 w-6 text-center">${medal(i)}</span>
+                <span class="font-medium">${entry.name}</span>
+            </div>
+            <span class="text-emerald-400 font-semibold">${entry.sets} Sätze</span>
+        `;
+        container.appendChild(div);
+    });
+}
 </script>
 {% endblock %}
