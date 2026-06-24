@@ -2,21 +2,14 @@ from fastapi import FastAPI, Request, Depends, HTTPException, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from itsdangerous import URLSafeTimedSerializer
 import os
 from datetime import date, timedelta, datetime
 from sqlalchemy.orm import Session
 from typing import Optional
 
-from app.database import engine, get_db, run_migrations
+from app.database import engine, get_db, Base
 from app import models
-from app.auth import (
-    register_user,
-    authenticate_user,
-    create_session,
-    get_session_user_id,
-    COOKIE_NAME,
-    COOKIE_MAX_AGE,
-)
 from app.algorithm import get_weight_recommendation, calculate_1rm_trend
 from app.seed import seed_data
 
@@ -25,151 +18,87 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+serializer = URLSafeTimedSerializer(SECRET_KEY)
+APP_PIN = os.getenv("APP_PIN", "1234")
+
+
 @app.on_event("startup")
 def startup():
-    run_migrations()
+    Base.metadata.create_all(bind=engine)
     db = next(get_db())
     seed_data(db)
     db.close()
 
 
-FREE_PATHS = {"/login", "/register", "/api/"}
 @app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    path = request.url.path
-    if path.startswith("/static") or path in FREE_PATHS or path.startswith("/api/"):
+async def check_pin(request: Request, call_next):
+    if request.url.path.startswith("/static") or request.url.path in ("/pin", "/api/"):
         return await call_next(request)
-
-    user_id = get_session_user_id(request)
-    if user_id is None:
-        if path == "/":
-            return RedirectResponse(url="/login", status_code=302)
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-
-    db = next(get_db())
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    db.close()
-    if user is None:
-        response = RedirectResponse(url="/login", status_code=302)
-        response.delete_cookie(COOKIE_NAME)
-        return response
-
-    request.state.user = user
+    if request.url.path == "/":
+        pin_cookie = request.cookies.get("session_pin")
+        if pin_cookie:
+            try:
+                serializer.loads(pin_cookie, max_age=86400 * 30)
+                return await call_next(request)
+            except Exception:
+                pass
+        return RedirectResponse(url="/pin", status_code=302)
     return await call_next(request)
 
 
-def get_user(request: Request) -> models.User:
-    user = getattr(request.state, "user", None)
-    if user is None:
-        raise HTTPException(status_code=401)
-    return user
+# ===== PIN =====
+@app.get("/pin", response_class=HTMLResponse)
+def pin_page(request: Request):
+    return templates.TemplateResponse("pin.html", {"request": request})
 
 
-# ===== AUTH =====
-@app.get("/login", response_class=HTMLResponse)
-def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
-
-
-@app.post("/login")
-def login_submit(
-    request: Request,
-    name: str = Form(...),
-    pin: str = Form(...),
-    db: Session = Depends(get_db),
-):
-    user = authenticate_user(db, name, pin)
-    if not user:
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Falscher Name oder PIN"},
+@app.post("/pin")
+def pin_submit(request: Request, pin: str = Form(...), next: str = Form("/")):
+    if pin == APP_PIN:
+        response = RedirectResponse(url=next, status_code=302)
+        response.set_cookie(
+            key="session_pin",
+            value=serializer.dumps("authorized"),
+            max_age=86400 * 30,
+            httponly=True,
+            samesite="lax",
         )
-    response = RedirectResponse(url="/", status_code=302)
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=create_session(user.id),
-        max_age=COOKIE_MAX_AGE,
-        httponly=True,
-        samesite="lax",
+        return response
+    return templates.TemplateResponse(
+        "pin.html", {"request": request, "error": "Falscher PIN"}
     )
-    return response
-
-
-@app.get("/register", response_class=HTMLResponse)
-def register_page(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request})
-
-
-@app.post("/register")
-def register_submit(
-    request: Request,
-    name: str = Form(...),
-    pin: str = Form(...),
-    db: Session = Depends(get_db),
-):
-    if len(name.strip()) < 1:
-        return templates.TemplateResponse(
-            "register.html",
-            {"request": request, "error": "Name darf nicht leer sein"},
-        )
-    if len(pin) < 3:
-        return templates.TemplateResponse(
-            "register.html",
-            {"request": request, "error": "PIN muss mindestens 3 Zeichen lang sein"},
-        )
-    user = register_user(db, name.strip(), pin)
-    if not user:
-        return templates.TemplateResponse(
-            "register.html",
-            {"request": request, "error": "Name bereits vergeben"},
-        )
-    return RedirectResponse(url="/login", status_code=302)
-
-
-@app.post("/logout")
-def logout():
-    response = RedirectResponse(url="/login", status_code=302)
-    response.delete_cookie(COOKIE_NAME)
-    return response
 
 
 # ===== DASHBOARD =====
 @app.get("/", response_class=HTMLResponse)
-def dashboard(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
-):
+def dashboard(request: Request, db: Session = Depends(get_db)):
     today = date.today()
     today_workout = (
         db.query(models.Workout)
-        .filter(models.Workout.user_id == user.id, models.Workout.date == today)
+        .filter(models.Workout.date == today)
         .order_by(models.Workout.id.desc())
         .first()
     )
     last_workout = (
         db.query(models.Workout)
-        .filter(
-            models.Workout.user_id == user.id,
-            models.Workout.is_completed == True,
-        )
+        .filter(models.Workout.is_completed == True)
         .order_by(models.Workout.date.desc())
         .first()
     )
     weight_entries = (
         db.query(models.WeightEntry)
-        .filter(models.WeightEntry.user_id == user.id)
         .order_by(models.WeightEntry.date.desc())
         .limit(30)
         .all()
     )
     latest_weight = weight_entries[0] if weight_entries else None
 
+    # Weekly workout stats
     week_start = today - timedelta(days=today.weekday())
     week_workouts = (
         db.query(models.Workout)
         .filter(
-            models.Workout.user_id == user.id,
             models.Workout.date >= week_start,
             models.Workout.date <= today,
             models.Workout.is_completed == True,
@@ -181,7 +110,6 @@ def dashboard(
         "dashboard.html",
         {
             "request": request,
-            "user": user,
             "today_workout": today_workout,
             "last_workout": last_workout,
             "weight_entries": weight_entries[::-1] if weight_entries else [],
@@ -194,20 +122,15 @@ def dashboard(
 
 # ===== WORKOUTS =====
 @app.get("/workouts", response_class=HTMLResponse)
-def workout_list(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
-):
+def workout_list(request: Request, db: Session = Depends(get_db)):
     workouts = (
         db.query(models.Workout)
-        .filter(models.Workout.user_id == user.id)
         .order_by(models.Workout.date.desc())
         .limit(50)
         .all()
     )
     return templates.TemplateResponse(
-        "workout.html", {"request": request, "user": user, "workouts": workouts}
+        "workout.html", {"request": request, "workouts": workouts}
     )
 
 
@@ -216,7 +139,6 @@ def new_workout(
     request: Request,
     template_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
 ):
     templates_list = (
         db.query(models.TemplateWorkout)
@@ -237,7 +159,6 @@ def new_workout(
         "workout_detail.html",
         {
             "request": request,
-            "user": user,
             "templates": templates_list,
             "all_exercises": all_exercises,
             "selected_template": selected,
@@ -251,9 +172,8 @@ def create_workout(
     name: str = Form(...),
     template_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
 ):
-    workout = models.Workout(name=name, date=date.today(), user_id=user.id)
+    workout = models.Workout(name=name, date=date.today())
     db.add(workout)
     db.flush()
 
@@ -287,24 +207,24 @@ def create_workout(
 
 @app.get("/workout/{workout_id}", response_class=HTMLResponse)
 def workout_detail(
-    request: Request,
-    workout_id: int,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
+    request: Request, workout_id: int, db: Session = Depends(get_db)
 ):
     workout = (
         db.query(models.Workout)
-        .filter(models.Workout.id == workout_id, models.Workout.user_id == user.id)
+        .filter(models.Workout.id == workout_id)
         .first()
     )
     if not workout:
         raise HTTPException(status_code=404, detail="Workout not found")
 
+    # Build recommendations inline for display
     recs = {}
     for we in workout.exercises:
         te = (
             db.query(models.TemplateExercise)
-            .filter(models.TemplateExercise.exercise_id == we.exercise_id)
+            .filter(
+                models.TemplateExercise.exercise_id == we.exercise_id,
+            )
             .first()
         )
         if te:
@@ -329,7 +249,6 @@ def workout_detail(
         "workout_detail.html",
         {
             "request": request,
-            "user": user,
             "workout": workout,
             "recs": recs,
             "all_exercises": all_exercises,
@@ -349,7 +268,6 @@ def update_set(
     is_warmup: bool = Form(False),
     is_completed: bool = Form(True),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
 ):
     s = db.query(models.Set).filter(models.Set.id == set_id).first()
     if s:
@@ -367,14 +285,11 @@ def update_set(
 
 @app.post("/workout/{workout_id}/complete")
 def complete_workout(
-    request: Request,
-    workout_id: int,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
+    request: Request, workout_id: int, db: Session = Depends(get_db)
 ):
     workout = (
         db.query(models.Workout)
-        .filter(models.Workout.id == workout_id, models.Workout.user_id == user.id)
+        .filter(models.Workout.id == workout_id)
         .first()
     )
     if workout:
@@ -384,12 +299,7 @@ def complete_workout(
 
 
 @app.post("/workout/{workout_id}/add-set/{exercise_id}")
-def add_set(
-    workout_id: int,
-    exercise_id: int,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
-):
+def add_set(workout_id: int, exercise_id: int, db: Session = Depends(get_db)):
     we = (
         db.query(models.WorkoutExercise)
         .filter(
@@ -421,7 +331,6 @@ def add_exercise_to_workout(
     exercise_id: int = Form(...),
     target_sets: int = Form(3),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
 ):
     max_order = (
         db.query(models.WorkoutExercise)
@@ -448,14 +357,11 @@ def add_exercise_to_workout(
 
 @app.post("/workout/{workout_id}/delete")
 def delete_workout(
-    request: Request,
-    workout_id: int,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
+    request: Request, workout_id: int, db: Session = Depends(get_db)
 ):
     w = (
         db.query(models.Workout)
-        .filter(models.Workout.id == workout_id, models.Workout.user_id == user.id)
+        .filter(models.Workout.id == workout_id)
         .first()
     )
     if w:
@@ -493,7 +399,6 @@ def calendar_page(
     month: Optional[int] = Query(None),
     year: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
 ):
     today = date.today()
     if month is None:
@@ -510,7 +415,6 @@ def calendar_page(
     workouts = (
         db.query(models.Workout)
         .filter(
-            models.Workout.user_id == user.id,
             models.Workout.date >= first_day,
             models.Workout.date <= last_day,
         )
@@ -531,7 +435,6 @@ def calendar_page(
         "calendar.html",
         {
             "request": request,
-            "user": user,
             "workout_dates": workout_dates,
             "month": month,
             "year": year,
@@ -544,17 +447,14 @@ def calendar_page(
             "prev_y": prev_y,
             "next_m": next_m,
             "next_y": next_y,
+            "date": date,
         },
     )
 
 
 # ===== PLAN =====
 @app.get("/plan", response_class=HTMLResponse)
-def view_plan(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
-):
+def view_plan(request: Request, db: Session = Depends(get_db)):
     templates_list = (
         db.query(models.TemplateWorkout)
         .order_by(models.TemplateWorkout.day_of_week)
@@ -567,7 +467,6 @@ def view_plan(
         "plan.html",
         {
             "request": request,
-            "user": user,
             "templates": templates_list,
             "all_exercises": all_exercises,
         },
@@ -583,7 +482,6 @@ def add_exercise_to_plan(
     target_reps_min: int = Form(8),
     target_reps_max: int = Form(12),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
 ):
     tmpl = (
         db.query(models.TemplateWorkout)
@@ -616,7 +514,6 @@ def delete_exercise_from_plan(
     request: Request,
     template_exercise_id: int,
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
 ):
     te = (
         db.query(models.TemplateExercise)
@@ -631,27 +528,20 @@ def delete_exercise_from_plan(
 
 # ===== EXERCISES =====
 @app.get("/exercises", response_class=HTMLResponse)
-def exercise_list(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
-):
+def exercise_list(request: Request, db: Session = Depends(get_db)):
     groups = (
         db.query(models.MuscleGroup)
         .order_by(models.MuscleGroup.name)
         .all()
     )
     return templates.TemplateResponse(
-        "exercises.html", {"request": request, "user": user, "groups": groups}
+        "exercises.html", {"request": request, "groups": groups}
     )
 
 
 @app.get("/exercise/{exercise_id}", response_class=HTMLResponse)
 def exercise_detail_page(
-    request: Request,
-    exercise_id: int,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
+    request: Request, exercise_id: int, db: Session = Depends(get_db)
 ):
     exercise = (
         db.query(models.Exercise)
@@ -663,6 +553,7 @@ def exercise_detail_page(
 
     trend = calculate_1rm_trend(db, exercise_id)
 
+    # Recent performances
     recent_workouts = (
         db.query(models.WorkoutExercise)
         .filter(models.WorkoutExercise.exercise_id == exercise_id)
@@ -675,7 +566,6 @@ def exercise_detail_page(
         "exercise_detail.html",
         {
             "request": request,
-            "user": user,
             "exercise": exercise,
             "trend": trend,
             "recent_workouts": recent_workouts,
@@ -685,19 +575,14 @@ def exercise_detail_page(
 
 # ===== WEIGHT =====
 @app.get("/weight", response_class=HTMLResponse)
-def weight_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
-):
+def weight_page(request: Request, db: Session = Depends(get_db)):
     entries = (
         db.query(models.WeightEntry)
-        .filter(models.WeightEntry.user_id == user.id)
         .order_by(models.WeightEntry.date)
         .all()
     )
     return templates.TemplateResponse(
-        "weight.html", {"request": request, "user": user, "entries": entries}
+        "weight.html", {"request": request, "entries": entries}
     )
 
 
@@ -707,11 +592,8 @@ def add_weight(
     weight: float = Form(...),
     notes: Optional[str] = Form(""),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
 ):
-    entry = models.WeightEntry(
-        weight=weight, notes=notes, date=date.today(), user_id=user.id
-    )
+    entry = models.WeightEntry(weight=weight, notes=notes, date=date.today())
     db.add(entry)
     db.commit()
     return RedirectResponse(url="/weight", status_code=302)
@@ -719,14 +601,11 @@ def add_weight(
 
 @app.post("/weight/delete/{entry_id}")
 def delete_weight(
-    request: Request,
-    entry_id: int,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
+    request: Request, entry_id: int, db: Session = Depends(get_db)
 ):
     entry = (
         db.query(models.WeightEntry)
-        .filter(models.WeightEntry.id == entry_id, models.WeightEntry.user_id == user.id)
+        .filter(models.WeightEntry.id == entry_id)
         .first()
     )
     if entry:
@@ -737,17 +616,10 @@ def delete_weight(
 
 # ===== STATS =====
 @app.get("/stats", response_class=HTMLResponse)
-def stats_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
-):
+def stats_page(request: Request, db: Session = Depends(get_db)):
     total_workouts = (
         db.query(models.Workout)
-        .filter(
-            models.Workout.user_id == user.id,
-            models.Workout.is_completed == True,
-        )
+        .filter(models.Workout.is_completed == True)
         .count()
     )
     total_sets = (
@@ -756,11 +628,11 @@ def stats_page(
         .count()
     )
 
+    # Weekly volume (last 12 weeks)
     twelve_weeks_ago = date.today() - timedelta(weeks=12)
     workouts = (
         db.query(models.Workout)
         .filter(
-            models.Workout.user_id == user.id,
             models.Workout.date >= twelve_weeks_ago,
             models.Workout.is_completed == True,
         )
@@ -782,6 +654,7 @@ def stats_page(
         {"week": k, "volume": round(v)} for k, v in sorted(weekly_volume.items())
     ]
 
+    # Best lifts (top 20)
     all_sets = (
         db.query(models.Set)
         .filter(
@@ -818,9 +691,9 @@ def stats_page(
         best_lifts.items(), key=lambda x: x[1]["weight"], reverse=True
     )[:20]
 
+    # Current bodyweight
     latest_weight_entry = (
         db.query(models.WeightEntry)
-        .filter(models.WeightEntry.user_id == user.id)
         .order_by(models.WeightEntry.date.desc())
         .first()
     )
@@ -829,7 +702,6 @@ def stats_page(
         "stats.html",
         {
             "request": request,
-            "user": user,
             "total_workouts": total_workouts,
             "total_sets": total_sets,
             "weekly_data": weekly_data,
@@ -841,17 +713,10 @@ def stats_page(
 
 # ===== HISTORY =====
 @app.get("/history", response_class=HTMLResponse)
-def history_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
-):
+def history_page(request: Request, db: Session = Depends(get_db)):
     workouts = (
         db.query(models.Workout)
-        .filter(
-            models.Workout.user_id == user.id,
-            models.Workout.is_completed == True,
-        )
+        .filter(models.Workout.is_completed == True)
         .order_by(models.Workout.date.desc())
         .all()
     )
@@ -862,118 +727,7 @@ def history_page(
         "history.html",
         {
             "request": request,
-            "user": user,
             "workouts": workouts,
             "all_exercises": all_exercises,
         },
     )
-
-
-# ===== LEADERBOARD =====
-@app.get("/leaderboard", response_class=HTMLResponse)
-def leaderboard_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_user),
-):
-    exercises = (
-        db.query(models.Exercise).order_by(models.Exercise.name).all()
-    )
-    return templates.TemplateResponse(
-        "leaderboard.html",
-        {
-            "request": request,
-            "user": user,
-            "exercises": exercises,
-        },
-    )
-
-
-@app.get("/api/leaderboard/exercise/{exercise_id}")
-def leaderboard_by_exercise(
-    exercise_id: int,
-    db: Session = Depends(get_db),
-):
-    rows = (
-        db.query(
-            models.User.name,
-            models.Set.weight,
-            models.Set.reps,
-            models.Workout.date,
-            models.Set.id,
-        )
-        .select_from(models.Set)
-        .join(models.WorkoutExercise, models.Set.workout_exercise_id == models.WorkoutExercise.id)
-        .join(models.Workout, models.WorkoutExercise.workout_id == models.Workout.id)
-        .join(models.User, models.Workout.user_id == models.User.id)
-        .filter(
-            models.WorkoutExercise.exercise_id == exercise_id,
-            models.Set.is_completed == True,
-            models.Set.is_warmup == False,
-            models.Set.weight.isnot(None),
-            models.Set.reps.isnot(None),
-        )
-        .order_by(models.Set.weight.desc())
-        .limit(50)
-        .all()
-    )
-
-    best_per_user = {}
-    for name, weight, reps, w_date, _ in rows:
-        e1rm = weight * (1 + reps / 30)
-        if name not in best_per_user or weight > best_per_user[name]["weight"]:
-            best_per_user[name] = {
-                "name": name,
-                "weight": weight,
-                "reps": reps,
-                "e1rm": round(e1rm, 1),
-                "date": str(w_date),
-            }
-
-    return {"entries": sorted(best_per_user.values(), key=lambda x: x["weight"], reverse=True)}
-
-
-@app.get("/api/leaderboard/weekly-volume")
-def leaderboard_weekly_volume(
-    db: Session = Depends(get_db),
-):
-    today = date.today()
-    week_start = today - timedelta(days=today.weekday())
-    rows = (
-        db.query(
-            models.User.name,
-            models.Workout.id,
-        )
-        .select_from(models.Workout)
-        .join(models.User, models.Workout.user_id == models.User.id)
-        .filter(
-            models.Workout.date >= week_start,
-            models.Workout.date <= today,
-            models.Workout.is_completed == True,
-        )
-        .all()
-    )
-
-    counts = {}
-    for name, _ in rows:
-        counts[name] = counts.get(name, 0) + 1
-
-    sorted_entries = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-    return {
-        "entries": [
-            {"name": name, "workouts": count} for name, count in sorted_entries
-        ]
-    }
-
-
-# ===== LEADERBOARD (alle Übungen auf einmal, für Dropdown) =====
-@app.get("/api/leaderboard/exercises")
-def leaderboard_exercises(
-    db: Session = Depends(get_db),
-):
-    exercises = (
-        db.query(models.Exercise.id, models.Exercise.name)
-        .order_by(models.Exercise.name)
-        .all()
-    )
-    return {"exercises": [{"id": e.id, "name": e.name} for e in exercises]}

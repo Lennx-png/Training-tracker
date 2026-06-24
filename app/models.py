@@ -1,19 +1,7 @@
 from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, ForeignKey, Date, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime, date
-from sqlalchemy.orm import relationship
 from app.database import Base
-
-
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, nullable=False)
-    pin_hash = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    workouts = relationship("Workout", back_populates="user")
-    weight_entries = relationship("WeightEntry", back_populates="user")
 
 
 class WeightEntry(Base):
@@ -23,8 +11,6 @@ class WeightEntry(Base):
     date = Column(Date, nullable=False, default=date.today)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    user = relationship("User", back_populates="weight_entries")
 
 
 class MuscleGroup(Base):
@@ -55,8 +41,6 @@ class Workout(Base):
     is_completed = Column(Boolean, default=False)
     duration_minutes = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    user = relationship("User", back_populates="workouts")
     exercises = relationship(
         "WorkoutExercise",
         back_populates="workout",

@@ -1,5 +1,4 @@
 from app import models
-from app.auth import hash_pin
 from sqlalchemy.orm import Session
 
 
@@ -92,12 +91,6 @@ ALL_MUSCLE_GROUPS = [
 
 def seed_data(db: Session):
     """Fügt Standard-Daten ein, falls die DB leer ist."""
-    # Default-User anlegen, falls noch keiner existiert
-    if db.query(models.User).count() == 0:
-        admin = models.User(name="Admin", pin_hash=hash_pin("1234"))
-        db.add(admin)
-        db.commit()
-
     if db.query(models.MuscleGroup).count() > 0:
         return
 

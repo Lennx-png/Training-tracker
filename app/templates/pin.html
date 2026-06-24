@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="min-h-[80vh] flex flex-col items-center justify-center">
+    <div class="text-6xl mb-6">💪</div>
+    <h1 class="text-2xl font-bold text-white mb-2">Training Tracker</h1>
+    <p class="text-stone-400 mb-8 text-center">Gib deinen PIN ein um fortzufahren</p>
+    <form method="POST" action="/pin" class="w-full max-w-xs">
+        <input type="hidden" name="next" value="{{ request.query_params.get('next', '/') }}">
+        <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off"
+            class="w-full text-center text-2xl tracking-[0.5em] bg-stone-800 border border-stone-700 rounded-xl px-4 py-4 text-white placeholder-stone-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="••••">
+        {% if error %}
+        <p class="text-red-400 text-sm mt-3 text-center">{{ error }}</p>
+        {% endif %}
+        <button type="submit" class="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 px-4 rounded-xl transition-colors">
+            Entsperren
+        </button>
+    </form>
+</div>
+{% endblock %}
