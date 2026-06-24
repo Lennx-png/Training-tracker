@@ -215,6 +215,7 @@ def workout_list(
 def new_workout(
     request: Request,
     template_id: Optional[int] = Query(None),
+    date_str: Optional[str] = Query(None, alias="date"),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_user),
 ):
@@ -233,6 +234,12 @@ def new_workout(
             .filter(models.TemplateWorkout.id == template_id)
             .first()
         )
+    preselected_date = date.today()
+    if date_str:
+        try:
+            preselected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
     return templates.TemplateResponse(
         "workout_detail.html",
         {
@@ -241,6 +248,7 @@ def new_workout(
             "templates": templates_list,
             "all_exercises": all_exercises,
             "selected_template": selected,
+            "preselected_date": preselected_date,
         },
     )
 
@@ -250,10 +258,17 @@ def create_workout(
     request: Request,
     name: str = Form(...),
     template_id: Optional[int] = Form(None),
+    workout_date: Optional[str] = Form(None, alias="date"),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_user),
 ):
-    workout = models.Workout(name=name, date=date.today(), user_id=user.id)
+    w_date = date.today()
+    if workout_date:
+        try:
+            w_date = datetime.strptime(workout_date, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    workout = models.Workout(name=name, date=w_date, user_id=user.id)
     db.add(workout)
     db.flush()
 
@@ -335,6 +350,25 @@ def workout_detail(
             "all_exercises": all_exercises,
         },
     )
+
+
+@app.post("/workout/{workout_id}/timer")
+def save_timer(
+    request: Request,
+    workout_id: int,
+    minutes: int = Form(...),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_user),
+):
+    workout = (
+        db.query(models.Workout)
+        .filter(models.Workout.id == workout_id, models.Workout.user_id == user.id)
+        .first()
+    )
+    if workout:
+        workout.duration_minutes = max(minutes, 1)
+        db.commit()
+    return {"ok": True}
 
 
 @app.post("/workout/{workout_id}/set/{set_id}")

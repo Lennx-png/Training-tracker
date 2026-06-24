@@ -30,18 +30,18 @@
             {% set has_workout = d in workout_dates %}
             {% set wo = workout_dates.get(d) %}
 
-            <div class="aspect-square flex flex-col items-center justify-center rounded-xl text-sm relative
-                        {% if is_today %}bg-emerald-900/40 border border-emerald-700/50{% endif %}
-                        {% if has_workout and not is_today %}bg-stone-800 border border-stone-700{% endif %}
-                        {% if not has_workout and not is_today %}hover:bg-stone-800/50{% endif %}">
+            <a href="{% if has_workout %}/workout/{{ wo.id }}{% else %}/workout/new?date={{ d.isoformat() }}{% endif %}"
+               class="aspect-square flex flex-col items-center justify-center rounded-xl text-sm relative
+                      {% if is_today %}bg-emerald-900/40 border border-emerald-700/50{% endif %}
+                      {% if has_workout and not is_today %}bg-stone-800 border border-stone-700{% endif %}
+                      {% if not has_workout and not is_today %}hover:bg-stone-800/50{% endif %}">
                 <span class="{% if is_today %}text-emerald-300 font-bold{% elif has_workout %}text-white{% else %}text-stone-400{% endif %}">
                     {{ day }}
                 </span>
                 {% if has_workout %}
-                <a href="/workout/{{ wo.id }}" class="absolute inset-0 rounded-xl" title="{{ wo.name }}"></a>
                 <div class="w-1.5 h-1.5 rounded-full {% if wo.is_completed %}bg-emerald-500{% else %}bg-amber-500{% endif %}"></div>
                 {% endif %}
-            </div>
+            </a>
             {% endfor %}
         </div>
     </div>

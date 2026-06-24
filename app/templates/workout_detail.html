@@ -9,18 +9,31 @@
         </div>
         <div class="flex items-center gap-2">
             {% if not workout.is_completed %}
-            <form method="POST" action="/workout/{{ workout.id }}/complete">
-                <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-                    Abschließen
+            <div class="flex items-center gap-2">
+                <button id="timer-btn" onclick="toggleTimer()"
+                    class="bg-stone-800 hover:bg-stone-700 text-stone-300 text-sm px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5">
+                    <span id="timer-icon">▶</span>
+                    <span id="timer-display">00:00</span>
                 </button>
-            </form>
-            <form method="POST" action="/workout/{{ workout.id }}/delete" onsubmit="return confirm('Wirklich löschen?')">
-                <button type="submit" class="bg-red-900/50 hover:bg-red-800 text-red-300 text-sm px-3 py-2 rounded-xl transition-colors">
-                    Löschen
-                </button>
-            </form>
+                <form method="POST" action="/workout/{{ workout.id }}/complete">
+                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+                        Abschließen
+                    </button>
+                </form>
+                <form method="POST" action="/workout/{{ workout.id }}/delete" onsubmit="return confirm('Wirklich löschen?')">
+                    <button type="submit" class="bg-red-900/50 hover:bg-red-800 text-red-300 text-sm px-3 py-2 rounded-xl transition-colors">
+                        Löschen
+                    </button>
+                </form>
+            </div>
             {% else %}
-            <span class="text-emerald-400 text-sm bg-emerald-900/30 px-3 py-1.5 rounded-full font-medium">Abgeschlossen</span>
+            <span class="text-emerald-400 text-sm bg-emerald-900/30 px-3 py-1.5 rounded-full font-medium">
+                {% if workout.duration_minutes %}
+                {{ workout.duration_minutes }} min
+                {% else %}
+                Abgeschlossen
+                {% endif %}
+            </span>
             {% endif %}
         </div>
     </div>
@@ -128,6 +141,57 @@
                 if (form && weight) form.value = weight;
             });
         });
+
+        // Timer
+        let timerInterval = null;
+        let seconds = 0;
+        const savedSeconds = parseInt(localStorage.getItem('timer_{{ workout.id }}') || '0');
+        if (savedSeconds) seconds = savedSeconds;
+        updateDisplay();
+
+        function toggleTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                document.getElementById('timer-icon').textContent = '▶';
+                saveTimer();
+            } else {
+                timerInterval = setInterval(() => {
+                    seconds++;
+                    updateDisplay();
+                    localStorage.setItem('timer_{{ workout.id }}', seconds);
+                }, 1000);
+                document.getElementById('timer-icon').textContent = '⏸';
+            }
+        }
+
+        function updateDisplay() {
+            const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+            const s = String(seconds % 60).padStart(2, '0');
+            document.getElementById('timer-display').textContent = `${m}:${s}`;
+        }
+
+        async function saveTimer() {
+            const mins = Math.round(seconds / 60);
+            if (mins < 1) return;
+            localStorage.removeItem('timer_{{ workout.id }}');
+            await fetch('/workout/{{ workout.id }}/timer', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: `minutes=${mins}`
+            });
+        }
+
+        // Auto-save on page unload
+        window.addEventListener('beforeunload', () => {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                const mins = Math.round(seconds / 60);
+                if (mins > 0) {
+                    navigator.sendBeacon('/workout/{{ workout.id }}/timer', `minutes=${mins}`);
+                }
+            }
+        });
     </script>
     {% endif %}
 
@@ -141,6 +205,7 @@
     {% endif %}
 
     <form method="POST" action="/workout/new" class="space-y-4">
+        <input type="hidden" name="date" value="{{ preselected_date.isoformat() }}">
         <input type="text" name="name" required placeholder="Trainingsname (z.B. Montag Push)"
                class="w-full bg-stone-900 border border-stone-700 rounded-xl px-4 py-3 text-white placeholder-stone-500 focus:outline-none focus:ring-2 focus:ring-emerald-500">
 
